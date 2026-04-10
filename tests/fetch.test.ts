@@ -75,6 +75,65 @@ describe("qFetch", () => {
     ).rejects.toThrow()
   })
 
+  it("Retry fixed", async () => {
+    const mockFetch = vi.spyOn(globalThis, "fetch")
+    mockFetch
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    const res = await qFetch({
+      url: "https://example.com/test",
+      options: {
+        retry: { retries: 3, delay: 50, backoff: "fixed" },
+      },
+    })
+
+    expect(res.ok).toBe(true)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    mockFetch.mockRestore()
+  })
+
+  it("Retry exponential", async () => {
+    const mockFetch = vi.spyOn(globalThis, "fetch")
+    mockFetch
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    const start = Date.now()
+    const res = await qFetch({
+      url: "https://example.com/test",
+      options: {
+        retry: { retries: 3, delay: 100, backoff: "exponential" },
+      },
+    })
+    const elapsed = Date.now() - start
+
+    expect(res.ok).toBe(true)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(elapsed).toBeGreaterThanOrEqual(250)
+    mockFetch.mockRestore()
+  })
+
+  it("Retry on network error", async () => {
+    const mockFetch = vi.spyOn(globalThis, "fetch")
+    mockFetch
+      .mockRejectedValueOnce(new Error("network error"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    const res = await qFetch({
+      url: "https://example.com/test",
+      options: {
+        retry: { retries: 2, delay: 50 },
+      },
+    })
+
+    expect(res.ok).toBe(true)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    mockFetch.mockRestore()
+  })
+
   it("Streaming sse", async () => {
     const onData = vi.fn()
 

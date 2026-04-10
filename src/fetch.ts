@@ -28,6 +28,18 @@ const createResponse = (response: Response): qResponse => ({
 const isPlainObject = (v: unknown): v is Record<string, any> =>
   Object.prototype.toString.call(v) === "[object Object]"
 
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+const getRetryDelay = (attempt: number, delay: number, backoff: "fixed" | "exponential") =>
+  backoff === "exponential" ? delay * 2 ** attempt : delay
+
+const defaultShouldRetry = (error: unknown, response?: Response) => {
+  if (response) {
+    return response.status >= 500 || response.status === 429 || response.status === 408
+  }
+  return true
+}
+
 const client = async (config: qConfig) => {
   const {
     url,
@@ -37,6 +49,12 @@ const client = async (config: qConfig) => {
     timeout,
     options = {},
   } = config
+
+  const retry = options.retry
+  const maxAttempts = (retry?.retries ?? 0) + 1
+  const retryDelay = retry?.delay ?? 1000
+  const backoff = retry?.backoff ?? "fixed"
+  const shouldRetry = retry?.shouldRetry ?? defaultShouldRetry
 
   const headers: Record<string, string> = {}
 
@@ -53,39 +71,53 @@ const client = async (config: qConfig) => {
   const requestBody: BodyInit | null =
     method === "GET" || method === "HEAD" ? null : hasBody ? (config.body as BodyInit) : null
 
-  const controller = new AbortController()
-  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  let lastError: unknown
 
-  if (timeout) {
-    timeoutId = setTimeout(() => controller.abort(), timeout)
-  }
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const controller = new AbortController()
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
 
-  try {
-    const response = await fetch(url, {
-      method,
-      headers: new Headers(headers),
-      body: requestBody,
-      cache,
-      credentials,
-      signal: controller.signal,
-    })
-
-    if (timeoutId) clearTimeout(timeoutId)
-
-    if (response.status === 401) {
-      config.authCallback?.()
-      throw new Error("401 Unauthorized")
+    if (timeout) {
+      timeoutId = setTimeout(() => controller.abort(), timeout)
     }
 
-    if (response.status === 429) {
-      throw new Error("429 Too Many Requests")
-    }
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: new Headers(headers),
+        body: requestBody,
+        cache,
+        credentials,
+        signal: controller.signal,
+      })
 
-    return response
-  } catch (error) {
-    if (timeoutId) clearTimeout(timeoutId)
-    throw error
+      if (timeoutId) clearTimeout(timeoutId)
+
+      if (response.status === 401) {
+        config.authCallback?.()
+        throw new Error("401 Unauthorized")
+      }
+
+      if (!response.ok && attempt < maxAttempts - 1 && shouldRetry(null, response)) {
+        await wait(getRetryDelay(attempt, retryDelay, backoff))
+        continue
+      }
+
+      return response
+    } catch (error) {
+      if (timeoutId) clearTimeout(timeoutId)
+      lastError = error
+
+      if (attempt < maxAttempts - 1 && shouldRetry(error)) {
+        await wait(getRetryDelay(attempt, retryDelay, backoff))
+        continue
+      }
+
+      throw error
+    }
   }
+
+  throw lastError
 }
 
 export const qBuildQueryURL = (baseUrl: string, params: Record<string, string>) => {

@@ -20,9 +20,17 @@ export interface qAuthorization {
   value: string
 }
 
+export interface qRetry {
+  retries?: number
+  delay?: number
+  backoff?: "fixed" | "exponential"
+  shouldRetry?: (error: unknown, response?: Response) => boolean
+}
+
 export interface qConfigOptions {
   authorization?: string | qAuthorization | null
   [key: string]: any
+  retry?: qRetry
 }
 
 export interface qConfig {
