@@ -173,6 +173,7 @@ const detectProtocol = (
 }
 
 export const qFetchStream = async <T = unknown>(
+  url: string,
   config: qStreamConfig<T>,
   callbacks: qStreamCallbacks<T>,
 ): Promise<void> => {
@@ -181,7 +182,7 @@ export const qFetchStream = async <T = unknown>(
   let res: Awaited<ReturnType<typeof qFetch>>
 
   try {
-    res = await qFetch({ ...config, timeout })
+    res = await qFetch(url, { ...config, timeout })
   } catch (err) {
     callbacks.onError?.(safeError(err))
     return

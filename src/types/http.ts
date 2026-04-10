@@ -40,7 +40,6 @@ export interface qCallbacks {
 }
 
 export interface qConfig {
-  url: string
   method?: qHTTPMethod
   headers?: Record<string, string>
   bodyType?: qBodyType

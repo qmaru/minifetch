@@ -40,9 +40,8 @@ const defaultShouldRetry = (error: unknown, response?: Response) => {
   return true
 }
 
-const client = async (config: qConfig) => {
+const client = async (url: string, config: qConfig) => {
   const {
-    url,
     method = "GET",
     cache = "default",
     credentials = "same-origin",
@@ -153,7 +152,7 @@ export const qBuildJsonBody = (params: Record<string, any>): string => {
   return JSON.stringify(params)
 }
 
-export const qFetch = async (config: qConfig): Promise<qResponse> => {
+export const qFetch = async (url: string, config: qConfig): Promise<qResponse> => {
   const buildBody = (config: qConfig) => {
     switch (config.bodyType) {
       case "json":
@@ -203,7 +202,7 @@ export const qFetch = async (config: qConfig): Promise<qResponse> => {
   Object.assign(headers, built.headers)
 
   try {
-    const res = await client({
+    const res = await client(url, {
       ...config,
       headers,
       body: built.body,
@@ -226,9 +225,9 @@ export const qFetch = async (config: qConfig): Promise<qResponse> => {
   }
 }
 
-export const qFetchRaw = async (config: qConfig): Promise<qResponse> => {
+export const qFetchRaw = async (url: string, config: qConfig): Promise<qResponse> => {
   try {
-    const res = await client(config)
+    const res = await client(url, config)
     const qRes = createResponse(res)
 
     if (!qRes.ok) {

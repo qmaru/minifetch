@@ -4,9 +4,7 @@ import { qFetchStream } from "../src/stream"
 
 describe("qFetch", () => {
   it("GET Json", async () => {
-    const res = await qFetch({
-      url: "https://httpbun.com/ip",
-    })
+    const res = await qFetch("https://httpbun.com/ip", {})
 
     const data = await res.toJson<{ title: string }>()
 
@@ -15,8 +13,7 @@ describe("qFetch", () => {
   })
 
   it("POST Json", async () => {
-    const res = await qFetch({
-      url: "https://httpbun.com/post",
+    const res = await qFetch("https://httpbun.com/post", {
       method: "POST",
       bodyType: "json",
       body: { a: 1 },
@@ -28,8 +25,7 @@ describe("qFetch", () => {
   })
 
   it("URL Encoded", async () => {
-    const res = await qFetch({
-      url: "https://httpbun.com/post",
+    const res = await qFetch("https://httpbun.com/post", {
       method: "POST",
       bodyType: "urlencoded",
       body: { a: 1 },
@@ -41,8 +37,7 @@ describe("qFetch", () => {
   })
 
   it("Form Data", async () => {
-    const res = await qFetch({
-      url: "https://httpbun.com/post",
+    const res = await qFetch("https://httpbun.com/post", {
       method: "POST",
       bodyType: "form",
       body: { a: 1 },
@@ -54,8 +49,7 @@ describe("qFetch", () => {
   })
 
   it("Merge Headers", async () => {
-    const res = await qFetch({
-      url: "https://httpbun.com/headers",
+    const res = await qFetch("https://httpbun.com/headers", {
       headers: {
         "X-Test": "abc",
       },
@@ -67,12 +61,7 @@ describe("qFetch", () => {
   })
 
   it("Timeout", async () => {
-    await expect(
-      qFetch({
-        url: "https://httpbun.com/delay/3",
-        timeout: 500,
-      }),
-    ).rejects.toThrow()
+    await expect(qFetch("https://httpbun.com/delay/3", { timeout: 500 })).rejects.toThrow()
   })
 
   it("Retry fixed", async () => {
@@ -82,8 +71,7 @@ describe("qFetch", () => {
       .mockResolvedValueOnce(new Response(null, { status: 500 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
 
-    const res = await qFetch({
-      url: "https://example.com/test",
+    const res = await qFetch("https://example.com/test", {
       options: {
         retry: { retries: 3, delay: 50, backoff: "fixed" },
       },
@@ -102,8 +90,7 @@ describe("qFetch", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
 
     const start = Date.now()
-    const res = await qFetch({
-      url: "https://example.com/test",
+    const res = await qFetch("https://example.com/test", {
       options: {
         retry: { retries: 3, delay: 100, backoff: "exponential" },
       },
@@ -122,8 +109,7 @@ describe("qFetch", () => {
       .mockRejectedValueOnce(new Error("network error"))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
 
-    const res = await qFetch({
-      url: "https://example.com/test",
+    const res = await qFetch("https://example.com/test", {
       options: {
         retry: { retries: 2, delay: 50 },
       },
@@ -138,8 +124,8 @@ describe("qFetch", () => {
     const onData = vi.fn()
 
     await qFetchStream(
+      "https://httpbun.com/sse",
       {
-        url: "https://httpbun.com/sse",
         protocol: "sse",
         timeout: 30000,
       },
