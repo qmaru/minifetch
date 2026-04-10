@@ -10,7 +10,9 @@ export type qHTTPMethod =
   | "CONNECT"
   | "PURGE"
 
-type qBodyType = "json" | "form" | "urlencoded" | "protobuf"
+export type qBodyType = "json" | "form" | "urlencoded" | "protobuf"
+
+export type qStreamProtocol = "sse" | "ndjson" | "auto"
 
 export interface qAuthorization {
   key: string
@@ -36,6 +38,11 @@ export interface qConfig {
   authCallback?: () => void
 }
 
+export interface qStreamConfig<T = unknown> extends qConfig {
+  protocol?: qStreamProtocol
+  parser?: (raw: string) => T
+}
+
 export interface qResponse {
   ok: boolean
   status: number
@@ -50,4 +57,10 @@ export interface qResponse {
   toArrayBuffer: () => Promise<ArrayBuffer>
   toFormData: () => Promise<FormData>
   raw: Response
+}
+
+export interface qStreamCallbacks<T = string> {
+  onData: (data: T) => void
+  onEnd?: () => void
+  onError?: (error: Error) => void
 }

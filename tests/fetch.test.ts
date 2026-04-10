@@ -1,21 +1,22 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { qFetch } from "../src/fetch"
+import { qFetchStream } from "../src/stream"
 
 describe("qFetch", () => {
-  it("should GET json", async () => {
+  it("GET Json", async () => {
     const res = await qFetch({
-      url: "https://httpbin.org/json",
+      url: "https://httpbun.com/ip",
     })
 
     const data = await res.toJson<{ title: string }>()
 
     expect(res.ok).toBe(true)
-    expect(data.slideshow.title).toBeDefined()
+    expect(data.origin).toBeDefined()
   })
 
-  it("should POST json", async () => {
+  it("POST Json", async () => {
     const res = await qFetch({
-      url: "https://httpbin.org/post",
+      url: "https://httpbun.com/post",
       method: "POST",
       bodyType: "json",
       body: { a: 1 },
@@ -26,9 +27,9 @@ describe("qFetch", () => {
     expect(data.json.a).toBe(1)
   })
 
-  it("should send urlencoded", async () => {
+  it("URL Encoded", async () => {
     const res = await qFetch({
-      url: "https://httpbin.org/post",
+      url: "https://httpbun.com/post",
       method: "POST",
       bodyType: "urlencoded",
       body: { a: 1 },
@@ -39,9 +40,9 @@ describe("qFetch", () => {
     expect(data.form.a).toBe("1")
   })
 
-  it("should send form data", async () => {
+  it("Form Data", async () => {
     const res = await qFetch({
-      url: "https://httpbin.org/post",
+      url: "https://httpbun.com/post",
       method: "POST",
       bodyType: "form",
       body: { a: 1 },
@@ -52,9 +53,9 @@ describe("qFetch", () => {
     expect(data.form.a).toBe("1")
   })
 
-  it("should merge headers", async () => {
+  it("Merge Headers", async () => {
     const res = await qFetch({
-      url: "https://httpbin.org/headers",
+      url: "https://httpbun.com/headers",
       headers: {
         "X-Test": "abc",
       },
@@ -65,12 +66,27 @@ describe("qFetch", () => {
     expect(data.headers["X-Test"]).toBe("abc")
   })
 
-  it("should timeout", async () => {
+  it("Timeout", async () => {
     await expect(
       qFetch({
-        url: "https://httpbin.org/delay/3",
+        url: "https://httpbun.com/delay/3",
         timeout: 500,
       }),
     ).rejects.toThrow()
   })
+
+  it("Streaming sse", async () => {
+    const onData = vi.fn()
+
+    await qFetchStream(
+      {
+        url: "https://httpbun.com/sse",
+        protocol: "sse",
+        timeout: 30000,
+      },
+      { onData },
+    )
+
+    expect(onData).toHaveBeenCalledTimes(10)
+  }, 30000)
 })

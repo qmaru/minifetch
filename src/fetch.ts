@@ -1,5 +1,5 @@
-import { qAuthorization, qConfig, qResponse } from "@/types/http"
 import { qHEADERS } from "@/constants/index"
+import type { qAuthorization, qConfig, qResponse } from "@/types/http"
 
 const setAuthorization = (auth: string | qAuthorization, headers: Record<string, string>) => {
   if (typeof auth === "string") {
