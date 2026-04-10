@@ -33,6 +33,12 @@ export interface qConfigOptions {
   retry?: qRetry
 }
 
+export interface qCallbacks {
+  onSuccess?: (response: qResponse) => void
+  onError?: (error: Error, status?: number) => void
+  onFinally?: () => void
+}
+
 export interface qConfig {
   url: string
   method?: qHTTPMethod
@@ -43,7 +49,8 @@ export interface qConfig {
   cache?: RequestCache | undefined
   credentials?: RequestCredentials | undefined
   timeout?: number
-  authCallback?: () => void
+  redirect?: RequestRedirect
+  callbacks?: qCallbacks
 }
 
 export interface qStreamConfig<T = unknown> extends qConfig {

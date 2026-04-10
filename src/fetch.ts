@@ -46,6 +46,7 @@ const client = async (config: qConfig) => {
     method = "GET",
     cache = "default",
     credentials = "same-origin",
+    redirect = "follow",
     timeout,
     options = {},
   } = config
@@ -88,15 +89,11 @@ const client = async (config: qConfig) => {
         body: requestBody,
         cache,
         credentials,
+        redirect,
         signal: controller.signal,
       })
 
       if (timeoutId) clearTimeout(timeoutId)
-
-      if (response.status === 401) {
-        config.authCallback?.()
-        throw new Error("401 Unauthorized")
-      }
 
       if (!response.ok && attempt < maxAttempts - 1 && shouldRetry(null, response)) {
         await wait(getRetryDelay(attempt, retryDelay, backoff))
@@ -205,16 +202,46 @@ export const qFetch = async (config: qConfig): Promise<qResponse> => {
   }
   Object.assign(headers, built.headers)
 
-  const res = await client({
-    ...config,
-    headers,
-    body: built.body,
-  })
+  try {
+    const res = await client({
+      ...config,
+      headers,
+      body: built.body,
+    })
 
-  return createResponse(res)
+    const qRes = createResponse(res)
+
+    if (!qRes.ok) {
+      config.callbacks?.onError?.(new Error(`HTTP ${qRes.status} ${qRes.statusText}`), qRes.status)
+    } else {
+      config.callbacks?.onSuccess?.(qRes)
+    }
+
+    return qRes
+  } catch (error) {
+    config.callbacks?.onError?.(error instanceof Error ? error : new Error(String(error)))
+    throw error
+  } finally {
+    config.callbacks?.onFinally?.()
+  }
 }
 
 export const qFetchRaw = async (config: qConfig): Promise<qResponse> => {
-  const res = await client(config)
-  return createResponse(res)
+  try {
+    const res = await client(config)
+    const qRes = createResponse(res)
+
+    if (!qRes.ok) {
+      config.callbacks?.onError?.(new Error(`HTTP ${qRes.status} ${qRes.statusText}`), qRes.status)
+    } else {
+      config.callbacks?.onSuccess?.(qRes)
+    }
+
+    return qRes
+  } catch (error) {
+    config.callbacks?.onError?.(error instanceof Error ? error : new Error(String(error)))
+    throw error
+  } finally {
+    config.callbacks?.onFinally?.()
+  }
 }
