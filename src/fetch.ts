@@ -17,11 +17,13 @@ const createResponse = (response: Response): qResponse => ({
   url: response.url,
   redirected: response.redirected,
   type: response.type,
+  body: response.body,
   toJson: <T = any>() => response.clone().json() as Promise<T>,
   toText: () => response.clone().text(),
   toBlob: () => response.clone().blob(),
   toArrayBuffer: () => response.clone().arrayBuffer(),
   toFormData: () => response.clone().formData(),
+  clone: () => createResponse(response.clone()),
   raw: response,
 })
 

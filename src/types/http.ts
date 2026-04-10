@@ -65,11 +65,13 @@ export interface qResponse {
   url: string
   redirected: boolean
   type: ResponseType
+  body: ReadableStream<Uint8Array> | null
   toJson: <T = any>() => Promise<T>
   toText: () => Promise<string>
   toBlob: () => Promise<Blob>
   toArrayBuffer: () => Promise<ArrayBuffer>
   toFormData: () => Promise<FormData>
+  clone: () => qResponse
   raw: Response
 }
 
