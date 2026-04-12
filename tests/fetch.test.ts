@@ -5,9 +5,7 @@ import { qFetchStream } from "../src/stream"
 describe("qFetch", () => {
   it("GET Json", async () => {
     const res = await qFetch("https://httpbun.com/ip", {})
-
     const data = await res.toJson<{ title: string }>()
-
     expect(res.ok).toBe(true)
     expect(data.origin).toBeDefined()
   })
@@ -18,9 +16,7 @@ describe("qFetch", () => {
       bodyType: "json",
       body: { a: 1 },
     })
-
     const data = await res.toJson<any>()
-
     expect(data.json.a).toBe(1)
   })
 
@@ -30,9 +26,7 @@ describe("qFetch", () => {
       bodyType: "urlencoded",
       body: { a: 1 },
     })
-
     const data = await res.toJson<any>()
-
     expect(data.form.a).toBe("1")
   })
 
@@ -42,21 +36,15 @@ describe("qFetch", () => {
       bodyType: "form",
       body: { a: 1 },
     })
-
     const data = await res.toJson<any>()
-
     expect(data.form.a).toBe("1")
   })
 
   it("Merge Headers", async () => {
     const res = await qFetch("https://httpbun.com/headers", {
-      headers: {
-        "X-Test": "abc",
-      },
+      headers: { "X-Test": "abc" },
     })
-
     const data = await res.toJson<any>()
-
     expect(data.headers["X-Test"]).toBe("abc")
   })
 
@@ -121,17 +109,73 @@ describe("qFetch", () => {
   })
 
   it("Streaming sse", async () => {
-    const onData = vi.fn()
+    const mockFetch = vi.spyOn(globalThis, "fetch")
 
-    await qFetchStream(
-      "https://httpbun.com/sse",
-      {
-        protocol: "sse",
-        timeout: 30000,
-      },
-      { onData },
+    const openaiStream = [
+      `data: ${JSON.stringify({
+        choices: [{ delta: { content: "hello," } }],
+      })}\n\n`,
+      `data: ${JSON.stringify({
+        choices: [{ delta: { content: "world" } }],
+      })}\n\n`,
+      `data: [DONE]\n\n`,
+    ].join("")
+
+    mockFetch.mockResolvedValue(
+      new Response(openaiStream, {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+        },
+      }),
     )
 
-    expect(onData).toHaveBeenCalledTimes(10)
+    let result = ""
+
+    await qFetchStream(
+      "https://api.openai.com/v1/chat/completions",
+      { protocol: "sse" },
+      {
+        onData: (data: any) => {
+          if (!data) return
+          result += data.choices?.[0]?.delta?.content ?? ""
+        },
+      },
+    )
+
+    expect(result).toBe("hello,world")
+    mockFetch.mockRestore()
   }, 30000)
+
+  it("Streaming ndjson", async () => {
+    const mockFetch = vi.spyOn(globalThis, "fetch")
+
+    const ollamaStream = [
+      JSON.stringify({ message: { content: "hello," } }),
+      JSON.stringify({ message: { content: "world" } }),
+      JSON.stringify({ done: true }),
+    ].join("\n")
+
+    mockFetch.mockResolvedValue(
+      new Response(ollamaStream, {
+        status: 200,
+        headers: {
+          "content-type": "application/x-ndjson",
+        },
+      }),
+    )
+
+    let result = ""
+
+    await qFetchStream(
+      "http://127.0.0.1:11434/api/chat",
+      { protocol: "ndjson" },
+      {
+        onData: (data: any) => {
+          result += data.message?.content ?? ""
+        },
+      },
+    )
+    expect(result).toBe("hello,world")
+  })
 })
