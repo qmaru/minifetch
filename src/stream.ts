@@ -3,29 +3,32 @@ import type { qStreamConfig, qStreamCallbacks, qStreamProtocol } from "@/types"
 
 const safeError = (err: unknown) => (err instanceof Error ? err : new Error(String(err)))
 
-async function* lineStream(body: ReadableStream<Uint8Array>) {
-  const reader = body
-    .pipeThrough(new TextDecoderStream() as unknown as TransformStream<Uint8Array, string>)
-    .getReader()
+const isAbortError = (err: unknown) =>
+  err instanceof DOMException ? err.name === "AbortError" : false
+
+const toTextDecoderStream = () =>
+  new TextDecoderStream() as unknown as TransformStream<Uint8Array, string>
+
+const splitLines = () => {
   let buffer = ""
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
+  return new TransformStream<string, string>({
+    transform(chunk, controller) {
+      buffer += chunk
 
-    buffer += value
+      let idx: number
+      while ((idx = buffer.indexOf("\n")) !== -1) {
+        let line = buffer.slice(0, idx)
+        if (line.endsWith("\r")) line = line.slice(0, -1)
 
-    let idx
-    while ((idx = buffer.indexOf("\n")) !== -1) {
-      let line = buffer.slice(0, idx)
-      if (line.endsWith("\r")) line = line.slice(0, -1)
-
-      yield line
-      buffer = buffer.slice(idx + 1)
-    }
-  }
-
-  if (buffer) yield buffer
+        controller.enqueue(line)
+        buffer = buffer.slice(idx + 1)
+      }
+    },
+    flush(controller) {
+      if (buffer) controller.enqueue(buffer)
+    },
+  })
 }
 
 const detectProtocol = (
@@ -49,58 +52,81 @@ const detectProtocol = (
 
 const readNDJSON = async <T>(
   body: ReadableStream<Uint8Array>,
-  { onData, onError, onEnd }: qStreamCallbacks<T>,
+  callbacks: qStreamCallbacks<T>,
   parser?: (line: string) => T,
+  signal?: AbortSignal,
 ) => {
   const parse = parser ?? ((line: string) => JSON.parse(line) as T)
 
   try {
-    for await (const line of lineStream(body)) {
-      if (!line) continue
+    const stream = body.pipeThrough(toTextDecoderStream()).pipeThrough(splitLines())
+
+    const reader = stream.getReader()
+
+    signal?.addEventListener("abort", () => {
+      reader.cancel()
+    })
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      if (!value) continue
 
       try {
-        onData(parse(line))
+        callbacks.onData(parse(value))
       } catch (err) {
-        onError?.(safeError(err))
+        callbacks.onError?.(safeError(err))
       }
     }
 
-    onEnd?.()
+    callbacks.onEnd?.()
   } catch (err) {
-    onError?.(safeError(err))
+    if (!isAbortError(err)) {
+      callbacks.onError?.(safeError(err))
+    }
   }
 }
 
 const readSSE = async <T>(
   body: ReadableStream<Uint8Array>,
-  { onData, onError, onEnd }: qStreamCallbacks<T>,
+  callbacks: qStreamCallbacks<T>,
   parser?: (raw: string) => T,
+  signal?: AbortSignal,
 ) => {
-  const parse =
-    parser ??
-    ((raw: string) => {
-      if (raw === "[DONE]") return null as unknown as T
-      return JSON.parse(raw) as T
-    })
+  const parse = parser ?? ((raw: string) => JSON.parse(raw) as T)
 
   let eventData = ""
 
   try {
-    for await (const line of lineStream(body)) {
+    const stream = body.pipeThrough(toTextDecoderStream()).pipeThrough(splitLines())
+
+    const reader = stream.getReader()
+
+    signal?.addEventListener("abort", () => {
+      reader.cancel()
+    })
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const line = value
+
       if (!line) {
-        if (eventData) {
-          const data = eventData.trimEnd()
+        if (!eventData) continue
 
-          if (data === "[DONE]") break
+        const data = eventData.trimEnd()
+        eventData = ""
 
-          try {
-            onData(parse(data))
-          } catch (err) {
-            onError?.(safeError(err))
-          }
+        if (data === "[DONE]") break
 
-          eventData = ""
+        try {
+          callbacks.onData(parse(data))
+        } catch (err) {
+          callbacks.onError?.(safeError(err))
         }
+
         continue
       }
 
@@ -111,9 +137,11 @@ const readSSE = async <T>(
       }
     }
 
-    onEnd?.()
+    callbacks.onEnd?.()
   } catch (err) {
-    onError?.(safeError(err))
+    if (!isAbortError(err)) {
+      callbacks.onError?.(safeError(err))
+    }
   }
 }
 
@@ -122,12 +150,12 @@ export const qFetchStream = async <T = unknown>(
   config: qStreamConfig<T>,
   callbacks: qStreamCallbacks<T>,
 ): Promise<void> => {
-  const { protocol = "auto", parser, timeout = 15000 } = config
+  const { protocol = "auto", parser, timeout = 15000, signal } = config
 
   let res: Awaited<ReturnType<typeof qFetch>>
 
   try {
-    res = await qFetch(url, { ...config, timeout })
+    res = await qFetch(url, { ...config, timeout, ...(signal && { signal }) })
   } catch (err) {
     callbacks.onError?.(safeError(err))
     return
@@ -155,8 +183,9 @@ export const qFetchStream = async <T = unknown>(
   const finalProtocol = detectProtocol(raw, protocol)
 
   if (finalProtocol === "ndjson") {
-    return readNDJSON<T>(raw.body, callbacks, parser)
+    await readNDJSON<T>(raw.body, callbacks, parser, signal)
+    return
   }
 
-  return readSSE<T>(raw.body, callbacks, parser)
+  await readSSE<T>(raw.body, callbacks, parser, signal)
 }

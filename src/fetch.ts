@@ -83,6 +83,10 @@ const client = async (url: string, config: qConfig) => {
       timeoutId = setTimeout(() => controller.abort(), timeout)
     }
 
+    const signal = config.signal
+      ? AbortSignal.any([config.signal, controller.signal])
+      : controller.signal
+
     try {
       const response = await fetch(url, {
         method,
@@ -91,7 +95,7 @@ const client = async (url: string, config: qConfig) => {
         cache,
         credentials,
         redirect,
-        signal: controller.signal,
+        signal: signal,
       })
 
       if (timeoutId) clearTimeout(timeoutId)
@@ -104,6 +108,7 @@ const client = async (url: string, config: qConfig) => {
       return response
     } catch (error) {
       if (timeoutId) clearTimeout(timeoutId)
+      if (signal.aborted) throw error
       lastError = error
 
       if (attempt < maxAttempts - 1 && shouldRetry(error)) {

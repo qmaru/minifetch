@@ -54,6 +54,7 @@ export interface qConfig {
   credentials?: RequestCredentials | undefined
   timeout?: number
   redirect?: RequestRedirect
+  signal?: AbortSignal
   callbacks?: qCallbacks
 }
 
