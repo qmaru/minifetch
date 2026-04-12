@@ -10,9 +10,14 @@ export type qHTTPMethod =
   | "CONNECT"
   | "PURGE"
 
-export type qBodyType = "json" | "form" | "urlencoded" | "protobuf"
+export type qBodyType = "json" | "form" | "urlencoded" | "protobuf" | "raw"
 
 export type qStreamProtocol = "sse" | "ndjson" | "auto"
+
+export type qBuildBodyResult = {
+  headers: Record<string, string>
+  body: BodyInit | null
+}
 
 export interface qAuthorization {
   key: string

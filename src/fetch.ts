@@ -1,5 +1,5 @@
 import { qHEADERS } from "@/constants/index"
-import type { qAuthorization, qConfig, qResponse } from "@/types/http"
+import type { qAuthorization, qConfig, qResponse, qBuildBodyResult } from "@/types/http"
 
 const setAuthorization = (auth: string | qAuthorization, headers: Record<string, string>) => {
   if (typeof auth === "string") {
@@ -60,15 +60,15 @@ const client = async (url: string, config: qConfig) => {
 
   const headers: Record<string, string> = {}
 
-  if (config.headers) {
-    Object.assign(headers, config.headers)
-  }
-
   if (options.authorization) {
     setAuthorization(options.authorization, headers)
   }
 
-  const hasBody = config.body !== undefined && config.body !== null
+  if (config.headers) {
+    Object.assign(headers, config.headers)
+  }
+
+  const hasBody = config.body != null
 
   const requestBody: BodyInit | null =
     method === "GET" || method === "HEAD" ? null : hasBody ? (config.body as BodyInit) : null
@@ -154,54 +154,81 @@ export const qBuildJsonBody = (params: Record<string, any>): string => {
   return JSON.stringify(params)
 }
 
-export const qFetch = async (url: string, config: qConfig): Promise<qResponse> => {
-  const buildBody = (config: qConfig) => {
-    switch (config.bodyType) {
-      case "json":
-        return {
-          headers: qHEADERS.JSON,
-          body:
-            config.body !== undefined && config.body !== null ? qBuildJsonBody(config.body) : null,
-        }
+export const qBuildBody = (config: qConfig): qBuildBodyResult => {
+  const bodyType = config.bodyType ?? (isPlainObject(config.body) ? "json" : "raw")
 
-      case "urlencoded":
-        return {
-          headers: qHEADERS.FORM_URLENCODED,
-          body: isPlainObject(config.body) ? qBuildFormUrlEncoded(config.body) : null,
-        }
+  switch (bodyType) {
+    case "json": {
+      if (config.body === undefined || config.body === null) {
+        return { headers: {}, body: null }
+      }
 
-      case "form":
-        return {
-          headers: {},
-          body:
-            config.body instanceof FormData
-              ? config.body
-              : isPlainObject(config.body)
-                ? qBuildFormData(config.body)
-                : qBuildFormData({}),
-        }
+      return {
+        headers: qHEADERS.JSON,
+        body: qBuildJsonBody(config.body),
+      }
+    }
 
-      case "protobuf":
-        return {
-          headers: qHEADERS.PROTOBUF,
-          body: config.body,
-        }
+    case "urlencoded": {
+      if (!isPlainObject(config.body)) {
+        throw new Error("urlencoded body must be a plain object")
+      }
 
-      default:
-        return {
-          headers: {},
-          body: config.body ?? null,
-        }
+      return {
+        headers: qHEADERS.FORM_URLENCODED,
+        body: qBuildFormUrlEncoded(config.body),
+      }
+    }
+
+    case "form": {
+      if (config.body instanceof FormData) {
+        return { headers: {}, body: config.body }
+      }
+
+      if (isPlainObject(config.body)) {
+        return { headers: {}, body: qBuildFormData(config.body) }
+      }
+
+      throw new Error("form body must be FormData or plain object")
+    }
+
+    case "protobuf": {
+      if (config.body == null) {
+        return { headers: {}, body: null }
+      }
+
+      return {
+        headers: qHEADERS.PROTOBUF,
+        body: config.body,
+      }
+    }
+
+    case "raw": {
+      return {
+        headers: {},
+        body: config.body ?? null,
+      }
+    }
+
+    default: {
+      return {
+        headers: {},
+        body: config.body ?? null,
+      }
     }
   }
+}
 
-  const built = buildBody(config)
+export const qFetch = async (url: string, config: qConfig): Promise<qResponse> => {
+  const built = qBuildBody(config)
 
   const headers: Record<string, string> = {}
+
+  Object.assign(headers, built.headers)
+
   if (config.headers) {
     Object.assign(headers, config.headers)
   }
-  Object.assign(headers, built.headers)
 
   try {
     const res = await client(url, {
@@ -210,26 +237,6 @@ export const qFetch = async (url: string, config: qConfig): Promise<qResponse> =
       body: built.body,
     })
 
-    const qRes = createResponse(res)
-
-    if (!qRes.ok) {
-      config.callbacks?.onError?.(new Error(`HTTP ${qRes.status} ${qRes.statusText}`), qRes.status)
-    } else {
-      config.callbacks?.onSuccess?.(qRes)
-    }
-
-    return qRes
-  } catch (error) {
-    config.callbacks?.onError?.(error instanceof Error ? error : new Error(String(error)))
-    throw error
-  } finally {
-    config.callbacks?.onFinally?.()
-  }
-}
-
-export const qFetchRaw = async (url: string, config: qConfig): Promise<qResponse> => {
-  try {
-    const res = await client(url, config)
     const qRes = createResponse(res)
 
     if (!qRes.ok) {
