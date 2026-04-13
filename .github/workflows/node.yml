@@ -1,4 +1,4 @@
-name: build and deploy
+name: release
 
 on:
   push:
@@ -26,8 +26,8 @@ jobs:
       - name: Install deps
         run: pnpm install --frozen-lockfile
 
-      # - name: Run tests
-      #   run: pnpm test
+      - name: Run tests
+        run: pnpm test
 
       - name: Build
         run: pnpm build

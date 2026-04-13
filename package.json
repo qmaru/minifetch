@@ -1,6 +1,6 @@
 {
   "name": "@qmaru/minifetch",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A minimal, modern fetch wrapper",
   "author": "qmaru",
   "license": "ISC",
@@ -24,7 +24,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown --tsconfig tsconfig.build.json",
     "dev": "tsdown --watch",
     "test": "vitest test --run",
     "lint": "oxlint",
