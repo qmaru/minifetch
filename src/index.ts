@@ -1,4 +1,5 @@
 export * from "@/fetch"
 export * from "@/stream"
+export * from "@/storage"
 export * from "@/types"
 export * from "@/constants"
